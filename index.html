@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>GPS Tracker + เสาไฟ (Google Sheets + อัปเดตสถานะ)</title>
+
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+
+  <style>
+    html, body {
+      height: 100%;
+      margin: 0;
+      padding: 0;
+      font-family: "Segoe UI", Tahoma, sans-serif;
+      background: #f5f6fa;
+    }
+
+    #map {
+      height: 100vh;
+      width: 100%;
+      z-index: 1;
+    }
+
+    .status-bar {
+      position: fixed;
+      bottom: 10px;
+      left: 10px;
+      background: rgba(255,255,255,0.95);
+      padding: 10px 14px;
+      border-radius: 10px;
+      font-size: 14px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+      z-index: 1000;
+      line-height: 1.4;
+      max-width: 90%;
+    }
+
+    .refresh-btn {
+      position: fixed;
+      top: 15px;
+      right: 15px;
+      background: #007bff;
+      color: white;
+      border: none;
+      padding: 10px 14px;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: bold;
+      cursor: pointer;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+      z-index: 2000;
+      transition: background 0.2s ease;
+    }
+    .refresh-btn:hover { background: #0056b3; }
+
+    .legend {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      background: rgba(255,255,255,0.95);
+      padding: 10px 12px;
+      border-radius: 8px;
+      font-size: 13px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+      line-height: 1.6;
+      z-index: 9999;
+      transition: all 0.3s ease;
+    }
+    .legend div {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .legend-color {
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      border: 1px solid #666;
+      flex-shrink: 0;
+    }
+
+    @media (max-width: 600px) {
+      .status-bar { font-size: 12px; bottom: 8px; left: 8px; padding: 8px 10px; }
+      .legend { font-size: 12px; bottom: 70px; right: 8px; padding: 8px 10px; }
+      .legend-color { width: 12px; height: 12px; }
+      .refresh-btn { top: 10px; right: 10px; padding: 8px 12px; font-size: 13px; }
+      .leaflet-popup-content { font-size: 13px; }
+    }
+  </style>
+</head>
+
+<body>
+  <button id="refreshBtn" class="refresh-btn">🔄 อัปเดตตอนนี้</button>
+  <div id="map"></div>
+  <div id="status" class="status-bar">🕓 กำลังโหลดแผนที่...</div>
+
+  <div class="legend" id="legend">
+    <b>🗺️ คำอธิบายสี:</b>
+    <div><span class="legend-color" style="background: green;"></span> เสร็จแล้ว</div>
+    <div><span class="legend-color" style="background: orange;"></span> กำลังดำเนินการ</div>
+    <div><span class="legend-color" style="background: red;"></span> ยังไม่เริ่ม</div>
+    <div><span class="legend-color" style="background: pink;"></span> HM (รหัสงาน)</div>
+    <div><span class="legend-color" style="background: yellow;"></span> SP (รหัสงาน)</div>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <script>
+    // ⚙️ ตั้งค่า Webhook ของ Google Apps Script
+    const WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbz_gPRCTPjfUYrU6rTHNMhORTHtRp3eD6wRFQNgahZbqm4155NLETCx-rgB98M859AbZw/exec";
+
+    window.onload = () => {
+      const map = L.map('map').setView([13.736717, 100.523186], 13);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '&copy; OpenStreetMap contributors'
+      }).addTo(map);
+
+      const sheetID = "1KTFaGCzmtjJtezumsWDXFdsWlpZtSriq2mEHe-ujGNc";
+      const sheetURL = `https://docs.google.com/spreadsheets/d/${sheetID}/gviz/tq?tqx=out:json`;
+      const statusEl = document.getElementById("status");
+      const refreshBtn = document.getElementById("refreshBtn");
+      let sheetMarkers = [];
+
+      // 🛰️ ส่งข้อมูลสถานะกลับ Google Sheets
+      function sendStatusToSheet(name, newStatus) {
+        fetch(WEBHOOK_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name, status: newStatus })
+        })
+        .then(res => res.json())
+        .then(data => console.log("✅ อัปเดตสถานะ:", data))
+        .catch(err => console.error("❌ ส่งข้อมูลล้มเหลว:", err));
+      }
+
+      // 🧭 เปลี่ยนสถานะ marker
+      function updateMarkerStatus(marker, newStatus, color) {
+        const newIcon = L.divIcon({
+          html: `<div style="background:${color};width:16px;height:16px;border-radius:50%;border:2px solid white;"></div>`,
+          className: ""
+        });
+        marker.setIcon(newIcon);
+        marker.setPopupContent(`<b>สถานะอัปเดต:</b> ${newStatus}`);
+        sendStatusToSheet(marker.options.name, newStatus);
+      }
+
+      // 🪧 Popup สำหรับเลือกสถานะ
+      function createStatusPopup(marker, name, status, color) {
+        const popupContent = document.createElement("div");
+        popupContent.innerHTML = `
+          <b>${name}</b><br>
+          🔰 สถานะปัจจุบัน: <b style="color:${color}">${status}</b><br><br>
+          <button id="doneBtn" style="background:green;color:white;border:none;border-radius:6px;padding:4px 8px;cursor:pointer;">เสร็จแล้ว</button>
+          <button id="notStartBtn" style="background:red;color:white;border:none;border-radius:6px;padding:4px 8px;cursor:pointer;margin-left:5px;">ยังไม่เริ่ม</button>
+        `;
+
+        const popup = L.popup().setContent(popupContent);
+        marker.bindPopup(popup);
+
+        marker.on("popupopen", () => {
+          document.getElementById("doneBtn").addEventListener("click", () => {
+            updateMarkerStatus(marker, "เสร็จแล้ว", "green");
+          });
+          document.getElementById("notStartBtn").addEventListener("click", () => {
+            updateMarkerStatus(marker, "ยังไม่เริ่ม", "red");
+          });
+        });
+      }
+
+      // 📊 โหลดข้อมูลจาก Google Sheets
+      function loadSheetData() {
+        fetch(sheetURL)
+          .then(res => res.text())
+          .then(text => {
+            sheetMarkers.forEach(m => map.removeLayer(m));
+            sheetMarkers = [];
+
+            const json = JSON.parse(text.substring(47).slice(0, -2));
+            const rows = json.table.rows;
+
+            rows.forEach(r => {
+              const name = r.c[0]?.v;
+              const lat = r.c[1]?.v;
+              const lng = r.c[2]?.v;
+              const status = r.c[8]?.v || "";
+
+              if (lat && lng) {
+                let color = "blue";
+                if (/^SP\d+/i.test(status)) color = "yellow";
+                else if (/^HM\d+/i.test(status)) color = "pink";
+                else if (/เสร็จ/i.test(status)) color = "green";
+                else if (/กำลัง/i.test(status)) color = "orange";
+                else if (/ยังไม่/i.test(status)) color = "red";
+
+                const icon = L.divIcon({
+                  html: `<div style="background:${color};width:16px;height:16px;border-radius:50%;border:2px solid white;"></div>`,
+                  className: ""
+                });
+
+                const marker = L.marker([lat, lng], { icon, name }).addTo(map);
+                createStatusPopup(marker, name, status, color);
+                sheetMarkers.push(marker);
+              }
+            });
+
+            if (sheetMarkers.length > 0) {
+              const group = L.featureGroup(sheetMarkers);
+              map.fitBounds(group.getBounds());
+            }
+
+            statusEl.innerHTML = "✅ อัปเดตล่าสุด: " + new Date().toLocaleTimeString();
+          })
+          .catch(err => {
+            console.error("โหลดข้อมูลล้มเหลว", err);
+            statusEl.innerHTML = "❌ โหลดข้อมูลไม่สำเร็จ";
+          });
+      }
+
+      loadSheetData();
+      setInterval(loadSheetData, 300000);
+
+      refreshBtn.addEventListener("click", () => {
+        refreshBtn.disabled = true;
+        refreshBtn.innerText = "🔄 กำลังอัปเดต...";
+        loadSheetData();
+        setTimeout(() => {
+          refreshBtn.disabled = false;
+          refreshBtn.innerText = "🔄 อัปเดตตอนนี้";
+        }, 3000);
+      });
+    };
+  </script>
+</body>
+</html>
