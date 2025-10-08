@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>GPS Tracker + เสาไฟ (Google Sheets + อัปเดตสถานะ)</title>
+  <title>GPS Tracker + เสาไฟ (Google Sheets + Toast แจ้งเตือน)</title>
 
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 
@@ -16,68 +16,52 @@
       background: #f5f6fa;
     }
 
-    #map {
-      height: 100vh;
-      width: 100%;
-      z-index: 1;
-    }
+    #map { height: 100vh; width: 100%; z-index: 1; }
 
     .status-bar {
-      position: fixed;
-      bottom: 10px;
-      left: 10px;
+      position: fixed; bottom: 10px; left: 10px;
       background: rgba(255,255,255,0.95);
-      padding: 10px 14px;
-      border-radius: 10px;
-      font-size: 14px;
-      box-shadow: 0 2px 6px rgba(0,0,0,0.25);
-      z-index: 1000;
-      line-height: 1.4;
-      max-width: 90%;
+      padding: 10px 14px; border-radius: 10px;
+      font-size: 14px; box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+      z-index: 1000; line-height: 1.4; max-width: 90%;
     }
 
     .refresh-btn {
-      position: fixed;
-      top: 15px;
-      right: 15px;
-      background: #007bff;
-      color: white;
-      border: none;
-      padding: 10px 14px;
-      border-radius: 8px;
-      font-size: 14px;
-      font-weight: bold;
-      cursor: pointer;
-      box-shadow: 0 2px 5px rgba(0,0,0,0.3);
-      z-index: 2000;
-      transition: background 0.2s ease;
+      position: fixed; top: 15px; right: 15px;
+      background: #007bff; color: white;
+      border: none; padding: 10px 14px;
+      border-radius: 8px; font-size: 14px; font-weight: bold;
+      cursor: pointer; box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+      z-index: 2000; transition: background 0.2s ease;
     }
     .refresh-btn:hover { background: #0056b3; }
 
     .legend {
-      position: fixed;
-      bottom: 20px;
-      right: 20px;
+      position: fixed; bottom: 20px; right: 20px;
       background: rgba(255,255,255,0.95);
-      padding: 10px 12px;
-      border-radius: 8px;
-      font-size: 13px;
-      box-shadow: 0 2px 6px rgba(0,0,0,0.25);
-      line-height: 1.6;
-      z-index: 9999;
-      transition: all 0.3s ease;
+      padding: 10px 12px; border-radius: 8px;
+      font-size: 13px; box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+      line-height: 1.6; z-index: 9999;
     }
-    .legend div {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-    }
+    .legend div { display: flex; align-items: center; gap: 6px; }
     .legend-color {
-      width: 14px;
-      height: 14px;
-      border-radius: 50%;
-      border: 1px solid #666;
+      width: 14px; height: 14px;
+      border-radius: 50%; border: 1px solid #666;
       flex-shrink: 0;
+    }
+
+    /* ✅ Toast แจ้งเตือน */
+    .toast {
+      position: fixed;
+      top: 20px; right: 20px;
+      background: #333; color: white;
+      padding: 12px 20px; border-radius: 6px;
+      font-size: 14px; opacity: 0;
+      transition: opacity 0.5s, transform 0.3s;
+      z-index: 3000; transform: translateY(-20px);
+    }
+    .toast.show {
+      opacity: 1; transform: translateY(0);
     }
 
     @media (max-width: 600px) {
@@ -94,21 +78,22 @@
   <button id="refreshBtn" class="refresh-btn">🔄 อัปเดตตอนนี้</button>
   <div id="map"></div>
   <div id="status" class="status-bar">🕓 กำลังโหลดแผนที่...</div>
-
-  <div class="legend" id="legend">
+  <div class="legend">
     <b>🗺️ คำอธิบายสี:</b>
     <div><span class="legend-color" style="background: green;"></span> เสร็จแล้ว</div>
     <div><span class="legend-color" style="background: orange;"></span> กำลังดำเนินการ</div>
     <div><span class="legend-color" style="background: red;"></span> ยังไม่เริ่ม</div>
-    <div><span class="legend-color" style="background: pink;"></span> HM (รหัสงาน)</div>
-    <div><span class="legend-color" style="background: yellow;"></span> SP (รหัสงาน)</div>
+    <div><span class="legend-color" style="background: pink;"></span> HM</div>
+    <div><span class="legend-color" style="background: yellow;"></span> SP</div>
   </div>
+
+  <!-- Toast -->
+  <div id="toast" class="toast"></div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
   <script>
-    // ⚙️ ตั้งค่า Webhook ของ Google Apps Script
-    const WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbz_gPRCTPjfUYrU6rTHNMhORTHtRp3eD6wRFQNgahZbqm4155NLETCx-rgB98M859AbZw/exec";
+    const WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbxxxxxxxxxxxxxxxxxxxx/exec"; // <-- แปะ URL ของคุณ
 
     window.onload = () => {
       const map = L.map('map').setView([13.736717, 100.523186], 13);
@@ -121,9 +106,18 @@
       const sheetURL = `https://docs.google.com/spreadsheets/d/${sheetID}/gviz/tq?tqx=out:json`;
       const statusEl = document.getElementById("status");
       const refreshBtn = document.getElementById("refreshBtn");
+      const toast = document.getElementById("toast");
       let sheetMarkers = [];
 
-      // 🛰️ ส่งข้อมูลสถานะกลับ Google Sheets
+      // 🪄 Toast แสดงข้อความ
+      function showToast(message, type = "info") {
+        toast.textContent = message;
+        toast.style.background = type === "success" ? "#28a745" : (type === "error" ? "#dc3545" : "#333");
+        toast.classList.add("show");
+        setTimeout(() => toast.classList.remove("show"), 3000);
+      }
+
+      // 📡 ส่งข้อมูลกลับ Google Sheets
       function sendStatusToSheet(name, newStatus) {
         fetch(WEBHOOK_URL, {
           method: "POST",
@@ -131,11 +125,17 @@
           body: JSON.stringify({ name, status: newStatus })
         })
         .then(res => res.json())
-        .then(data => console.log("✅ อัปเดตสถานะ:", data))
-        .catch(err => console.error("❌ ส่งข้อมูลล้มเหลว:", err));
+        .then(data => {
+          console.log("✅ อัปเดตสถานะ:", data);
+          showToast(`บันทึก "${newStatus}" สำเร็จ (${name})`, "success");
+        })
+        .catch(err => {
+          console.error("❌ ส่งข้อมูลล้มเหลว:", err);
+          showToast("❌ เกิดข้อผิดพลาดในการบันทึก!", "error");
+        });
       }
 
-      // 🧭 เปลี่ยนสถานะ marker
+      // 🎨 เปลี่ยนสถานะ Marker
       function updateMarkerStatus(marker, newStatus, color) {
         const newIcon = L.divIcon({
           html: `<div style="background:${color};width:16px;height:16px;border-radius:50%;border:2px solid white;"></div>`,
@@ -146,7 +146,7 @@
         sendStatusToSheet(marker.options.name, newStatus);
       }
 
-      // 🪧 Popup สำหรับเลือกสถานะ
+      // 📍 Popup สำหรับเปลี่ยนสถานะ
       function createStatusPopup(marker, name, status, color) {
         const popupContent = document.createElement("div");
         popupContent.innerHTML = `
