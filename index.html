@@ -234,9 +234,9 @@
                 let color = "blue";
                 if (/^SP\d+/i.test(status)) color = "yellow";
                 else if (/^HM\d+/i.test(status)) color = "pink";
-                else if (/เสร็จ/i.test(status)) color = "green";
+                else if (/ไฟติด/i.test(status)) color = "green";
                 else if (/กำลัง/i.test(status)) color = "orange";
-                else if (/ยังไม่/i.test(status)) color = "red";
+                else if (/ไฟดับ/i.test(status)) color = "red";
 
                 const icon = L.divIcon({
                   html: `<div style="background:${color};width:16px;height:16px;border-radius:50%;border:2px solid white;"></div>`,
