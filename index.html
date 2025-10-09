@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>GPS Tracker + เสาไฟ (Google Sheets + Toast แจ้งเตือน)</title>
+  <title>GPS Tracker + เสาไฟ (Google Sheets + Proxy + Toast)</title>
 
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 
@@ -87,13 +87,13 @@
     <div><span class="legend-color" style="background: yellow;"></span> SP</div>
   </div>
 
-  <!-- Toast -->
   <div id="toast" class="toast"></div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
   <script>
-    const WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbxIPNhZzcPduLQONpuaiMNYP028ZvIZld6_s_mg5x1QFCOEKPF76jDs9RTyq01jbcglTg/exec"; // <-- แปะ URL ของคุณ
+    const WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbxIPNhZzcPduLQONpuaiMNYP028ZvIZld6_s_mg5x1QFCOEKPF76jDs9RTyq01jbcglTg/exec"; 
+    const PROXY = "https://corsproxy.io/?";
 
     window.onload = () => {
       const map = L.map('map').setView([13.736717, 100.523186], 13);
@@ -109,7 +109,7 @@
       const toast = document.getElementById("toast");
       let sheetMarkers = [];
 
-      // 🪄 Toast แสดงข้อความ
+      // 🔔 Toast function
       function showToast(message, type = "info") {
         toast.textContent = message;
         toast.style.background = type === "success" ? "#28a745" : (type === "error" ? "#dc3545" : "#333");
@@ -117,9 +117,11 @@
         setTimeout(() => toast.classList.remove("show"), 3000);
       }
 
-      // 📡 ส่งข้อมูลกลับ Google Sheets
+      // 📡 ส่งข้อมูลผ่าน Proxy เพื่อหลีกเลี่ยง CORS
       function sendStatusToSheet(name, newStatus) {
-        fetch(WEBHOOK_URL, {
+        const fullURL = PROXY + encodeURIComponent(WEBHOOK_URL);
+
+        fetch(fullURL, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ name, status: newStatus })
