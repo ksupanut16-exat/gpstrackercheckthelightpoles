@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>GPS Tracker + เสาไฟ (Google Sheets + Proxy + Toast)</title>
+  <title>GPS Tracker + เสาไฟ (Google Sheets + ชื่อผู้ตรวจงาน)</title>
 
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 
@@ -50,34 +50,55 @@
       flex-shrink: 0;
     }
 
-    /* ✅ Toast แจ้งเตือน */
+    /* ✅ Toast */
     .toast {
-      position: fixed;
-      top: 20px; right: 20px;
+      position: fixed; top: 20px; right: 20px;
       background: #333; color: white;
       padding: 12px 20px; border-radius: 6px;
       font-size: 14px; opacity: 0;
       transition: opacity 0.5s, transform 0.3s;
       z-index: 3000; transform: translateY(-20px);
     }
-    .toast.show {
-      opacity: 1; transform: translateY(0);
+    .toast.show { opacity: 1; transform: translateY(0); }
+
+    /* 👤 กล่องกรอกชื่อ */
+    .user-input {
+      position: fixed; top: 15px; left: 15px;
+      background: rgba(255,255,255,0.95);
+      padding: 10px 12px; border-radius: 8px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+      z-index: 2000;
+      display: flex; align-items: center; gap: 8px;
     }
+    .user-input input {
+      border: 1px solid #ccc; border-radius: 6px;
+      padding: 5px 8px; font-size: 14px;
+      width: 150px;
+    }
+    .user-input label { font-size: 14px; font-weight: 600; }
 
     @media (max-width: 600px) {
       .status-bar { font-size: 12px; bottom: 8px; left: 8px; padding: 8px 10px; }
       .legend { font-size: 12px; bottom: 70px; right: 8px; padding: 8px 10px; }
       .legend-color { width: 12px; height: 12px; }
       .refresh-btn { top: 10px; right: 10px; padding: 8px 12px; font-size: 13px; }
-      .leaflet-popup-content { font-size: 13px; }
+      .user-input { top: 10px; left: 10px; padding: 8px 10px; }
+      .user-input input { width: 120px; font-size: 13px; }
     }
   </style>
 </head>
 
 <body>
+  <!-- 🔹 ช่องกรอกชื่อผู้ตรวจ -->
+  <div class="user-input">
+    <label for="username">👤 ผู้ตรวจ:</label>
+    <input type="text" id="username" placeholder="ระบุชื่อผู้ตรวจ" />
+  </div>
+
   <button id="refreshBtn" class="refresh-btn">🔄 อัปเดตตอนนี้</button>
   <div id="map"></div>
   <div id="status" class="status-bar">🕓 กำลังโหลดแผนที่...</div>
+
   <div class="legend">
     <b>🗺️ คำอธิบายสี:</b>
     <div><span class="legend-color" style="background: green;"></span> เสร็จแล้ว</div>
@@ -92,7 +113,7 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
   <script>
-    const WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbxIPNhZzcPduLQONpuaiMNYP028ZvIZld6_s_mg5x1QFCOEKPF76jDs9RTyq01jbcglTg/exec"; 
+    const WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbxIPNhZzcPduLQONpuaiMNYP028ZvIZld6_s_mg5x1QFCOEKPF76jDs9RTyq01jbcglTg/exec";
     const PROXY = "https://corsproxy.io/?";
 
     window.onload = () => {
@@ -107,9 +128,10 @@
       const statusEl = document.getElementById("status");
       const refreshBtn = document.getElementById("refreshBtn");
       const toast = document.getElementById("toast");
+      const usernameInput = document.getElementById("username");
       let sheetMarkers = [];
 
-      // 🔔 Toast function
+      // 🪄 Toast แจ้งเตือน
       function showToast(message, type = "info") {
         toast.textContent = message;
         toast.style.background = type === "success" ? "#28a745" : (type === "error" ? "#dc3545" : "#333");
@@ -117,29 +139,26 @@
         setTimeout(() => toast.classList.remove("show"), 3000);
       }
 
-      // 📡 ส่งข้อมูลผ่าน Proxy เพื่อหลีกเลี่ยง CORS
+      // 📡 ส่งข้อมูลกลับ Google Sheets (ผ่าน Proxy)
       function sendStatusToSheet(name, newStatus) {
-  const proxyURL = "https://corsproxy.io/?";
-  const fullURL = proxyURL + encodeURIComponent(WEBHOOK_URL);
+        const fullURL = PROXY + encodeURIComponent(WEBHOOK_URL);
+        const user = usernameInput.value.trim() || "ไม่ระบุผู้ตรวจ";
 
-  const user = "เจ้าหน้าที่ตรวจงาน"; // 🧑 เปลี่ยนได้ตามต้องการ
-
-  fetch(fullURL, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name, status: newStatus, user })
-  })
-  .then(res => res.json())
-  .then(data => {
-    console.log("✅ อัปเดตสถานะ:", data);
-    showToast(`บันทึก "${newStatus}" สำเร็จ (${name})`, "success");
-  })
-  .catch(err => {
-    console.error("❌ ส่งข้อมูลล้มเหลว:", err);
-    showToast("❌ เกิดข้อผิดพลาดในการบันทึก!", "error");
-  });
-}
-
+        fetch(fullURL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name, status: newStatus, user })
+        })
+        .then(res => res.json())
+        .then(data => {
+          console.log("✅ อัปเดตสถานะ:", data);
+          showToast(`บันทึก "${newStatus}" สำเร็จ (${name})`, "success");
+        })
+        .catch(err => {
+          console.error("❌ ส่งข้อมูลล้มเหลว:", err);
+          showToast("❌ เกิดข้อผิดพลาดในการบันทึก!", "error");
+        });
+      }
 
       // 🎨 เปลี่ยนสถานะ Marker
       function updateMarkerStatus(marker, newStatus, color) {
