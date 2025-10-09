@@ -3,19 +3,12 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>GPS Tracker + เสาไฟ (จำชื่อผู้ตรวจ + จัดวางใหม่)</title>
+  <title>GPS Tracker + เสาไฟ (เลือกฝั่ง A/B)</title>
 
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 
   <style>
-    html, body {
-      height: 100%;
-      margin: 0;
-      padding: 0;
-      font-family: "Segoe UI", Tahoma, sans-serif;
-      background: #f5f6fa;
-    }
-
+    html, body { height: 100%; margin: 0; padding: 0; font-family: "Segoe UI", Tahoma, sans-serif; background: #f5f6fa; }
     #map { height: 100vh; width: 100%; z-index: 1; }
 
     .status-bar {
@@ -28,9 +21,8 @@
 
     .refresh-btn {
       position: fixed; top: 15px; right: 15px;
-      background: #007bff; color: white;
-      border: none; padding: 10px 14px;
-      border-radius: 8px; font-size: 14px; font-weight: bold;
+      background: #007bff; color: white; border: none;
+      padding: 10px 14px; border-radius: 8px; font-size: 14px; font-weight: bold;
       cursor: pointer; box-shadow: 0 2px 5px rgba(0,0,0,0.3);
       z-index: 2000; transition: background 0.2s ease;
     }
@@ -39,46 +31,38 @@
     .legend {
       position: fixed; bottom: 20px; right: 20px;
       background: rgba(255,255,255,0.95);
-      padding: 10px 12px; border-radius: 8px;
-      font-size: 13px; box-shadow: 0 2px 6px rgba(0,0,0,0.25);
-      line-height: 1.6; z-index: 9999;
+      padding: 10px 12px; border-radius: 8px; font-size: 13px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.25); line-height: 1.6; z-index: 9999;
     }
     .legend div { display: flex; align-items: center; gap: 6px; }
-    .legend-color {
-      width: 14px; height: 14px;
-      border-radius: 50%; border: 1px solid #666;
-      flex-shrink: 0;
-    }
+    .legend-color { width: 14px; height: 14px; border-radius: 50%; border: 1px solid #666; flex-shrink: 0; }
 
-    /* ✅ Toast */
+    /* Toast */
     .toast {
-      position: fixed; top: 20px; right: 20px;
-      background: #333; color: white;
-      padding: 12px 20px; border-radius: 6px;
-      font-size: 14px; opacity: 0;
-      transition: opacity 0.5s, transform 0.3s;
-      z-index: 3000; transform: translateY(-20px);
+      position: fixed; top: 20px; right: 20px; background: #333; color: white;
+      padding: 12px 20px; border-radius: 6px; font-size: 14px; opacity: 0;
+      transition: opacity 0.5s, transform 0.3s; z-index: 3000; transform: translateY(-20px);
     }
     .toast.show { opacity: 1; transform: translateY(0); }
 
-    /* 👤 กล่องกรอกชื่อ — ย้ายลงมาเหนือ status-bar */
+    /* กล่องกรอกชื่อ — อยู่เหนือ status-bar */
     .user-input {
-      position: fixed;
-      bottom: 65px;  /* อยู่เหนือแถบ “อัปเดตล่าสุด” */
-      left: 10px;
+      position: fixed; bottom: 65px; left: 10px;
       background: rgba(255,255,255,0.95);
-      padding: 10px 12px;
-      border-radius: 8px;
-      box-shadow: 0 2px 6px rgba(0,0,0,0.25);
-      z-index: 2000;
-      display: flex; align-items: center; gap: 8px;
+      padding: 10px 12px; border-radius: 8px; box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+      z-index: 2000; display: flex; align-items: center; gap: 8px;
     }
-    .user-input input {
-      border: 1px solid #ccc; border-radius: 6px;
-      padding: 5px 8px; font-size: 14px;
-      width: 150px;
-    }
+    .user-input input { border: 1px solid #ccc; border-radius: 6px; padding: 5px 8px; font-size: 14px; width: 150px; }
     .user-input label { font-size: 14px; font-weight: 600; }
+
+    /* ปุ่มสถานะใน popup */
+    .btn-row { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
+    .btn {
+      border: none; border-radius: 6px; padding: 6px 10px; cursor: pointer; font-size: 13px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+    }
+    .btn-green { background: #28a745; color: #fff; }
+    .btn-red   { background: #dc3545; color: #fff; }
 
     @media (max-width: 600px) {
       .status-bar { font-size: 12px; bottom: 8px; left: 8px; padding: 8px 10px; }
@@ -87,12 +71,13 @@
       .refresh-btn { top: 10px; right: 10px; padding: 8px 12px; font-size: 13px; }
       .user-input { bottom: 60px; left: 8px; padding: 8px 10px; }
       .user-input input { width: 120px; font-size: 13px; }
+      .leaflet-popup-content { font-size: 13px; }
     }
   </style>
 </head>
 
 <body>
-  <!-- 🔹 ช่องกรอกชื่อผู้ตรวจ -->
+  <!-- ชื่อผู้ตรวจ -->
   <div class="user-input">
     <label for="username">👤 ผู้ตรวจ:</label>
     <input type="text" id="username" placeholder="ระบุชื่อผู้ตรวจ" />
@@ -104,9 +89,9 @@
 
   <div class="legend">
     <b>🗺️ คำอธิบายสี:</b>
-    <div><span class="legend-color" style="background: green;"></span> ติดปกติ</div>
+    <div><span class="legend-color" style="background: green;"></span> ไฟติดปกติ (A/B)</div>
+    <div><span class="legend-color" style="background: red;"></span> ไฟดับ (A/B)</div>
     <div><span class="legend-color" style="background: orange;"></span> กำลังดำเนินการ</div>
-    <div><span class="legend-color" style="background: red;"></span> ไฟดับ</div>
     <div><span class="legend-color" style="background: pink;"></span> HM</div>
     <div><span class="legend-color" style="background: yellow;"></span> SP</div>
   </div>
@@ -121,10 +106,7 @@
 
     window.onload = () => {
       const map = L.map('map').setView([13.736717, 100.523186], 13);
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        maxZoom: 19,
-        attribution: '&copy; OpenStreetMap contributors'
-      }).addTo(map);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '&copy; OpenStreetMap contributors' }).addTo(map);
 
       const sheetID = "1KTFaGCzmtjJtezumsWDXFdsWlpZtSriq2mEHe-ujGNc";
       const sheetURL = `https://docs.google.com/spreadsheets/d/${sheetID}/gviz/tq?tqx=out:json`;
@@ -134,23 +116,18 @@
       const usernameInput = document.getElementById("username");
       let sheetMarkers = [];
 
-      // 🧠 โหลดชื่อจาก LocalStorage (ถ้ามี)
+      // โหลดชื่อผู้ตรวจ (จำค่า)
       const savedUser = localStorage.getItem("username");
       if (savedUser) {
         usernameInput.value = savedUser;
         showToast(`👋 ยินดีต้อนรับกลับ, ${savedUser}`, "info");
       }
-
-      // 💾 บันทึกชื่อผู้ตรวจอัตโนมัติเมื่อเปลี่ยนค่า
       usernameInput.addEventListener("change", () => {
         const name = usernameInput.value.trim();
-        if (name) {
-          localStorage.setItem("username", name);
-          showToast(`✅ บันทึกชื่อ "${name}" แล้ว`, "success");
-        }
+        if (name) { localStorage.setItem("username", name); showToast(`✅ บันทึกชื่อ "${name}" แล้ว`, "success"); }
       });
 
-      // 🪄 Toast แจ้งเตือน
+      // Toast
       function showToast(message, type = "info") {
         toast.textContent = message;
         toast.style.background = type === "success" ? "#28a745" : (type === "error" ? "#dc3545" : "#333");
@@ -158,7 +135,7 @@
         setTimeout(() => toast.classList.remove("show"), 3000);
       }
 
-      // 📡 ส่งข้อมูลกลับ Google Sheets (ผ่าน Proxy)
+      // ส่งไป Google Sheets (ผ่าน Proxy)
       function sendStatusToSheet(name, newStatus) {
         const fullURL = PROXY + encodeURIComponent(WEBHOOK_URL);
         const user = usernameInput.value.trim() || "ไม่ระบุผู้ตรวจ";
@@ -179,8 +156,22 @@
         });
       }
 
-      // 🎨 เปลี่ยนสถานะ Marker
-      function updateMarkerStatus(marker, newStatus, color) {
+      // แปลงสถานะ → สี
+      function colorForStatus(status) {
+        if (!status) return "blue";
+        if (/^SP\d+/i.test(status)) return "yellow";
+        if (/^HM\d+/i.test(status)) return "pink";
+        if (/ไฟดับ/i.test(status)) return "red";            // ครอบคลุม ไฟดับ(A)/(B)
+        if (/ไฟติดปกติ/i.test(status)) return "green";     // ครอบคลุม ไฟติดปกติ(A)/(B)
+        if (/กำลัง/i.test(status)) return "orange";
+        if (/เสร็จ/i.test(status)) return "green";
+        if (/ยังไม่/i.test(status)) return "red";
+        return "blue";
+      }
+
+      // อัปเดตไอคอน + บันทึก
+      function updateMarkerStatus(marker, newStatus) {
+        const color = colorForStatus(newStatus);
         const newIcon = L.divIcon({
           html: `<div style="background:${color};width:16px;height:16px;border-radius:50%;border:2px solid white;"></div>`,
           className: ""
@@ -190,30 +181,32 @@
         sendStatusToSheet(marker.options.name, newStatus);
       }
 
-      // 📍 Popup สำหรับเปลี่ยนสถานะ
+      // Popup เปลี่ยนสถานะ: เลือกไฟติด/ไฟดับ + ฝั่ง A/B
       function createStatusPopup(marker, name, status, color) {
         const popupContent = document.createElement("div");
         popupContent.innerHTML = `
           <b>${name}</b><br>
-          🔰 สถานะปัจจุบัน: <b style="color:${color}">${status}</b><br><br>
-          <button id="doneBtn" style="background:green;color:white;border:none;border-radius:6px;padding:4px 8px;cursor:pointer;">ติดปกติ</button>
-          <button id="notStartBtn" style="background:red;color:white;border:none;border-radius:6px;padding:4px 8px;cursor:pointer;margin-left:5px;">ไฟดับ</button>
+          🔰 สถานะปัจจุบัน: <b style="color:${color}">${status || "-"}</b>
+          <div style="margin-top:8px;font-weight:600;">เลือกสถานะไฟ:</div>
+          <div class="btn-row">
+            <button id="okA"  class="btn btn-green">ไฟติดปกติ (ฝั่ง A)</button>
+            <button id="okB"  class="btn btn-green">ไฟติดปกติ (ฝั่ง B)</button>
+            <button id="offA" class="btn btn-red">ไฟดับ (ฝั่ง A)</button>
+            <button id="offB" class="btn btn-red">ไฟดับ (ฝั่ง B)</button>
+          </div>
         `;
-
         const popup = L.popup().setContent(popupContent);
         marker.bindPopup(popup);
 
         marker.on("popupopen", () => {
-          document.getElementById("doneBtn").addEventListener("click", () => {
-            updateMarkerStatus(marker, "ติดปกติ", "green");
-          });
-          document.getElementById("notStartBtn").addEventListener("click", () => {
-            updateMarkerStatus(marker, "ไฟดับ", "red");
-          });
+          document.getElementById("okA").addEventListener("click",  () => updateMarkerStatus(marker, "ไฟติดปกติ(A)"));
+          document.getElementById("okB").addEventListener("click",  () => updateMarkerStatus(marker, "ไฟติดปกติ(B)"));
+          document.getElementById("offA").addEventListener("click", () => updateMarkerStatus(marker, "ไฟดับ(A)"));
+          document.getElementById("offB").addEventListener("click", () => updateMarkerStatus(marker, "ไฟดับ(B)"));
         });
       }
 
-      // 📊 โหลดข้อมูลจาก Google Sheets
+      // โหลดข้อมูลจาก Google Sheets
       function loadSheetData() {
         fetch(sheetURL)
           .then(res => res.text())
@@ -231,13 +224,7 @@
               const status = r.c[8]?.v || "";
 
               if (lat && lng) {
-                let color = "blue";
-                if (/^SP\d+/i.test(status)) color = "yellow";
-                else if (/^HM\d+/i.test(status)) color = "pink";
-                else if (/ไฟติด/i.test(status)) color = "green";
-                else if (/กำลัง/i.test(status)) color = "orange";
-                else if (/ไฟดับ/i.test(status)) color = "red";
-
+                const color = colorForStatus(status);
                 const icon = L.divIcon({
                   html: `<div style="background:${color};width:16px;height:16px;border-radius:50%;border:2px solid white;"></div>`,
                   className: ""
