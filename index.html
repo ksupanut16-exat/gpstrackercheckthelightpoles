@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>GPS Tracker + เสาไฟ (Google Sheets + ชื่อผู้ตรวจงาน)</title>
+  <title>GPS Tracker + เสาไฟ (จำชื่อผู้ตรวจอัตโนมัติ)</title>
 
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 
@@ -63,9 +63,12 @@
 
     /* 👤 กล่องกรอกชื่อ */
     .user-input {
-      position: fixed; top: 15px; left: 15px;
+      position: fixed;
+      top: 70px;  /* ไม่บังปุ่มซูม */
+      left: 15px;
       background: rgba(255,255,255,0.95);
-      padding: 10px 12px; border-radius: 8px;
+      padding: 10px 12px;
+      border-radius: 8px;
       box-shadow: 0 2px 6px rgba(0,0,0,0.25);
       z-index: 2000;
       display: flex; align-items: center; gap: 8px;
@@ -82,7 +85,7 @@
       .legend { font-size: 12px; bottom: 70px; right: 8px; padding: 8px 10px; }
       .legend-color { width: 12px; height: 12px; }
       .refresh-btn { top: 10px; right: 10px; padding: 8px 12px; font-size: 13px; }
-      .user-input { top: 10px; left: 10px; padding: 8px 10px; }
+      .user-input { top: 65px; left: 10px; padding: 8px 10px; }
       .user-input input { width: 120px; font-size: 13px; }
     }
   </style>
@@ -130,6 +133,22 @@
       const toast = document.getElementById("toast");
       const usernameInput = document.getElementById("username");
       let sheetMarkers = [];
+
+      // 🧠 โหลดชื่อจาก LocalStorage (ถ้ามี)
+      const savedUser = localStorage.getItem("username");
+      if (savedUser) {
+        usernameInput.value = savedUser;
+        showToast(`👋 ยินดีต้อนรับกลับ, ${savedUser}`, "info");
+      }
+
+      // 💾 บันทึกชื่อผู้ตรวจอัตโนมัติเมื่อเปลี่ยนค่า
+      usernameInput.addEventListener("change", () => {
+        const name = usernameInput.value.trim();
+        if (name) {
+          localStorage.setItem("username", name);
+          showToast(`✅ บันทึกชื่อ "${name}" แล้ว`, "success");
+        }
+      });
 
       // 🪄 Toast แจ้งเตือน
       function showToast(message, type = "info") {
