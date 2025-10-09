@@ -196,8 +196,8 @@
         popupContent.innerHTML = `
           <b>${name}</b><br>
           🔰 สถานะปัจจุบัน: <b style="color:${color}">${status}</b><br><br>
-          <button id="doneBtn" style="background:green;color:white;border:none;border-radius:6px;padding:4px 8px;cursor:pointer;">เสร็จแล้ว</button>
-          <button id="notStartBtn" style="background:red;color:white;border:none;border-radius:6px;padding:4px 8px;cursor:pointer;margin-left:5px;">ยังไม่เริ่ม</button>
+          <button id="doneBtn" style="background:green;color:white;border:none;border-radius:6px;padding:4px 8px;cursor:pointer;">ติดปกติ</button>
+          <button id="notStartBtn" style="background:red;color:white;border:none;border-radius:6px;padding:4px 8px;cursor:pointer;margin-left:5px;">ไฟดับ</button>
         `;
 
         const popup = L.popup().setContent(popupContent);
@@ -205,10 +205,10 @@
 
         marker.on("popupopen", () => {
           document.getElementById("doneBtn").addEventListener("click", () => {
-            updateMarkerStatus(marker, "เสร็จแล้ว", "green");
+            updateMarkerStatus(marker, "ติดปกติ", "green");
           });
           document.getElementById("notStartBtn").addEventListener("click", () => {
-            updateMarkerStatus(marker, "ยังไม่เริ่ม", "red");
+            updateMarkerStatus(marker, "ไฟดับ", "red");
           });
         });
       }
