@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>GPS Tracker + เสาไฟ (SP/HM + ไฟติด/ไฟดับ)</title>
+  <title>GPS Tracker + เสาไฟ (SP/HM + ไฟติด/ไฟดับ + เต็มจอ)</title>
 
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <style>
@@ -33,24 +33,17 @@
       width: 150px;
     }
 
-    .refresh-btn {
-      position: fixed; top: 15px; right: 15px;
+    .refresh-btn, .track-btn {
+      position: fixed; top: 15px;
       background: #007bff; color: white; border: none;
       padding: 10px 14px; border-radius: 8px;
       font-size: 14px; font-weight: bold; cursor: pointer;
       box-shadow: 0 2px 5px rgba(0,0,0,0.3);
-      z-index: 2000; transition: background 0.2s ease;
-    }
-    .refresh-btn:hover { background: #0056b3; }
-
-    .track-btn {
-      position: fixed; top: 15px; left: 15px;
-      background: #28a745; color: white; border: none;
-      padding: 10px 14px; border-radius: 8px;
-      font-size: 14px; font-weight: bold; cursor: pointer;
-      box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+      transition: background 0.2s ease;
       z-index: 2000;
     }
+    .refresh-btn { right: 15px; }
+    .track-btn { left: 15px; background: #28a745; }
     .track-btn.stop { background: #dc3545; }
 
     .legend {
@@ -130,7 +123,7 @@
       let userMarker = null, userCircle = null, userPath = [], userPolyline = null, watchID = null;
       let isZoomedIn = false;
 
-      // 🧭 แสดงข้อความแจ้งเตือน
+      // ⚙️ แสดงข้อความ
       function showToast(msg, type="info") {
         toast.textContent = msg;
         toast.style.background = type === "success" ? "#28a745" : type === "error" ? "#dc3545" : "#333";
@@ -160,15 +153,120 @@
         .catch(e => { console.error(e); showToast("❌ บันทึกล้มเหลว!", "error"); });
       }
 
-      function updateMarker(marker, newStatus) {
-        const color = colorForStatus(newStatus);
-        marker.setIcon(L.divIcon({
-          html: `<div style="background:${color};width:18px;height:18px;border-radius:50%;border:2px solid white;box-shadow:0 0 4px rgba(0,0,0,0.3);"></div>`
-        }));
-        marker.setPopupContent(`<b>สถานะอัปเดต:</b> ${newStatus}`);
-        sendStatusToSheet(marker.options.name, newStatus);
+      function createPopup(marker, name, status, color) {
+        const div = document.createElement("div");
+        div.innerHTML = `
+          <b>${name}</b><br>
+          🔰 <b style="color:${color}">${status || "-"}</b><br><br>
+          <div class="btn-row">
+            <button class="btn btn-green" id="onA">ไฟติด A</button>
+            <button class="btn btn-green" id="onB">ไฟติด B</button>
+            <button class="btn btn-green" id="onAB">ไฟติด AB</button>
+            <button class="btn btn-red" id="offA">ไฟดับ A</button>
+            <button class="btn btn-red" id="offB">ไฟดับ B</button>
+            <button class="btn btn-red" id="offAB">ไฟดับ AB</button>
+          </div>
+        `;
+        const popup = L.popup().setContent(div);
+        marker.bindPopup(popup);
+        marker.on("popupopen", () => {
+          document.getElementById("onA").onclick = () => sendStatusToSheet(name, "ไฟติดA");
+          document.getElementById("onB").onclick = () => sendStatusToSheet(name, "ไฟติดB");
+          document.getElementById("onAB").onclick = () => sendStatusToSheet(name, "ไฟติดAB");
+          document.getElementById("offA").onclick = () => sendStatusToSheet(name, "ไฟดับA");
+          document.getElementById("offB").onclick = () => sendStatusToSheet(name, "ไฟดับB");
+          document.getElementById("offAB").onclick = () => sendStatusToSheet(name, "ไฟดับAB");
+        });
       }
 
-      function createPopup(marker, name, status, color) {
-        const popupContent = document.createElement("div");
-        popupContent.innerHTML = `
+      function loadSheetData() {
+        fetch(sheetURL)
+          .then(res => res.text())
+          .then(text => {
+            sheetMarkers.forEach(m => map.removeLayer(m)); sheetMarkers = [];
+            const json = JSON.parse(text.substring(47).slice(0, -2));
+            const rows = json.table.rows;
+            rows.forEach(r => {
+              const name = r.c[0]?.v, lat = r.c[1]?.v, lng = r.c[2]?.v, status = r.c[8]?.v || "";
+              if (lat && lng) {
+                const color = colorForStatus(status);
+                const icon = L.divIcon({ html: `<div style='background:${color};width:18px;height:18px;border-radius:50%;border:2px solid white;'></div>` });
+                const m = L.marker([lat, lng], { icon, name }).addTo(map);
+                createPopup(m, name, status, color);
+                sheetMarkers.push(m);
+              }
+            });
+            if (sheetMarkers.length) map.fitBounds(L.featureGroup(sheetMarkers).getBounds());
+            statusEl.innerHTML = "✅ อัปเดตล่าสุด: " + new Date().toLocaleTimeString();
+          })
+          .catch(e => { console.error(e); statusEl.textContent = "❌ โหลดข้อมูลไม่สำเร็จ"; });
+      }
+
+      // 🚀 เริ่มติดตาม + เข้าสู่โหมดเต็มจอ
+      function startTracking() {
+        if (watchID) return;
+        showToast("🚀 เริ่มติดตามตำแหน่ง...", "success");
+        trackBtn.textContent = "⏸️ หยุดติดตาม";
+        trackBtn.classList.add("stop");
+
+        // ✅ เข้าสู่โหมดเต็มจอ
+        if (document.documentElement.requestFullscreen) {
+          document.documentElement.requestFullscreen().catch(err => console.warn("Fullscreen failed:", err));
+        }
+
+        watchID = navigator.geolocation.watchPosition(pos => {
+          const { latitude, longitude, accuracy } = pos.coords;
+          if (userMarker) map.removeLayer(userMarker);
+          if (userCircle) map.removeLayer(userCircle);
+
+          userMarker = L.marker([latitude, longitude], { icon: L.divIcon({ html: "📍" }) }).addTo(map);
+          userCircle = L.circle([latitude, longitude], { radius: accuracy }).addTo(map);
+
+          userPath.push([latitude, longitude]);
+          if (userPolyline) map.removeLayer(userPolyline);
+          userPolyline = L.polyline(userPath, { color: "#007bff", weight: 4 }).addTo(map);
+
+          map.setView([latitude, longitude], 17);
+          checkNearbyMarkers(latitude, longitude);
+          statusEl.innerHTML = `📍 ${latitude.toFixed(5)}, ${longitude.toFixed(5)} (±${accuracy.toFixed(1)} m)`;
+        }, err => showToast("⚠️ ไม่สามารถระบุตำแหน่งได้!", "error"), { enableHighAccuracy: true });
+      }
+
+      function stopTracking() {
+        if (!watchID) return;
+        navigator.geolocation.clearWatch(watchID);
+        watchID = null;
+        trackBtn.textContent = "▶️ เริ่มติดตาม";
+        trackBtn.classList.remove("stop");
+        showToast("🛑 หยุดติดตามแล้ว", "info");
+
+        // ❎ ออกจากโหมดเต็มจอ
+        if (document.fullscreenElement) {
+          document.exitFullscreen().catch(err => console.warn("Exit fullscreen failed:", err));
+        }
+      }
+
+      trackBtn.onclick = () => { if (watchID) stopTracking(); else startTracking(); };
+
+      // 📡 ตรวจสอบ Marker ใกล้เคียง
+      function checkNearbyMarkers(lat, lng) {
+        sheetMarkers.forEach(marker => {
+          const dist = map.distance([lat, lng], marker.getLatLng());
+          if (dist < 5 && !isZoomedIn) {
+            isZoomedIn = true;
+            map.setView(marker.getLatLng(), 19, { animate: true });
+            marker.openPopup();
+            showToast(`📡 ใกล้จุด ${marker.options.name} ระยะ ${dist.toFixed(1)} ม.`, "info");
+          } else if (dist >= 10 && isZoomedIn) {
+            isZoomedIn = false;
+          }
+        });
+      }
+
+      loadSheetData();
+      setInterval(loadSheetData, 300000);
+      refreshBtn.onclick = loadSheetData;
+    };
+  </script>
+</body>
+</html>
