@@ -6,7 +6,6 @@
   <title>GPS Tracker + เสาไฟ (SP/HM + ไฟติด/ไฟดับ)</title>
 
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-
   <style>
     html, body { height: 100%; margin: 0; padding: 0; font-family: "Segoe UI", Tahoma, sans-serif; background: #f5f6fa; }
     #map { height: 100vh; width: 100%; z-index: 1; }
@@ -44,6 +43,16 @@
     }
     .refresh-btn:hover { background: #0056b3; }
 
+    .track-btn {
+      position: fixed; top: 15px; left: 15px;
+      background: #28a745; color: white; border: none;
+      padding: 10px 14px; border-radius: 8px;
+      font-size: 14px; font-weight: bold; cursor: pointer;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+      z-index: 2000;
+    }
+    .track-btn.stop { background: #dc3545; }
+
     .legend {
       position: fixed; bottom: 20px; right: 20px;
       background: rgba(255,255,255,0.95);
@@ -65,36 +74,26 @@
     .toast.show { opacity: 1; transform: translateY(0); }
 
     .btn-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
-    .btn {
-      border: none; border-radius: 6px; padding: 6px 10px;
-      cursor: pointer; font-size: 13px;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.2);
-    }
+    .btn { border: none; border-radius: 6px; padding: 6px 10px; cursor: pointer; font-size: 13px; }
     .btn-green { background: #28a745; color: #fff; }
     .btn-red   { background: #dc3545; color: #fff; }
 
-    /* 🩵 ลบกรอบสี่เหลี่ยมซ้อน Marker */
-    .leaflet-div-icon {
-      background: transparent !important;
-      border: none !important;
-      box-shadow: none !important;
-    }
+    .leaflet-div-icon { background: transparent !important; border: none !important; box-shadow: none !important; }
 
     @media (max-width: 600px) {
       .status-bar { font-size: 12px; bottom: 8px; left: 8px; padding: 8px 10px; }
       .user-input { bottom: 60px; left: 8px; padding: 8px 10px; }
-      .user-input input { width: 120px; font-size: 13px; }
       .legend { font-size: 12px; bottom: 70px; right: 8px; padding: 8px 10px; }
     }
   </style>
 </head>
-
 <body>
   <div class="user-input">
     <label for="username">👤 ผู้ตรวจ:</label>
     <input type="text" id="username" placeholder="ระบุชื่อผู้ตรวจ" />
   </div>
 
+  <button id="trackBtn" class="track-btn">▶️ เริ่มติดตาม</button>
   <button id="refreshBtn" class="refresh-btn">🔄 อัปเดตตอนนี้</button>
   <div id="map"></div>
   <div id="status" class="status-bar">🕓 กำลังโหลดแผนที่...</div>
@@ -124,8 +123,14 @@
       const toast = document.getElementById("toast");
       const usernameInput = document.getElementById("username");
       const statusEl = document.getElementById("status");
-      let sheetMarkers = [];
+      const trackBtn = document.getElementById("trackBtn");
+      const refreshBtn = document.getElementById("refreshBtn");
 
+      let sheetMarkers = [];
+      let userMarker = null, userCircle = null, userPath = [], userPolyline = null, watchID = null;
+      let isZoomedIn = false;
+
+      // 🧭 แสดงข้อความแจ้งเตือน
       function showToast(msg, type="info") {
         toast.textContent = msg;
         toast.style.background = type === "success" ? "#28a745" : type === "error" ? "#dc3545" : "#333";
@@ -135,8 +140,8 @@
 
       function colorForStatus(status) {
         if (!status) return "blue";
-        if (/^SP\d*/i.test(status)) return "#ff66b2"; // pink
-        if (/^HM\d*/i.test(status)) return "#ffd54f"; // yellow
+        if (/^SP/i.test(status)) return "#ff66b2";
+        if (/^HM/i.test(status)) return "#ffd54f";
         if (/ไฟดับ/i.test(status)) return "red";
         if (/ไฟติด/i.test(status)) return "green";
         return "blue";
@@ -167,58 +172,3 @@
       function createPopup(marker, name, status, color) {
         const popupContent = document.createElement("div");
         popupContent.innerHTML = `
-          <b>${name}</b><br>
-          🔰 สถานะปัจจุบัน: <b style="color:${color}">${status || "-"}</b><br><br>
-          <div class="btn-row">
-            <button class="btn btn-green" id="onA">ไฟติด A</button>
-            <button class="btn btn-green" id="onB">ไฟติด B</button>
-            <button class="btn btn-green" id="onAB">ไฟติด AB</button>
-            <button class="btn btn-red" id="offA">ไฟดับ A</button>
-            <button class="btn btn-red" id="offB">ไฟดับ B</button>
-            <button class="btn btn-red" id="offAB">ไฟดับ AB</button>
-          </div>
-        `;
-        const popup = L.popup().setContent(popupContent);
-        marker.bindPopup(popup);
-        marker.on("popupopen", () => {
-          document.getElementById("onA").onclick = () => updateMarker(marker, "ไฟติดA");
-          document.getElementById("onB").onclick = () => updateMarker(marker, "ไฟติดB");
-          document.getElementById("onAB").onclick = () => updateMarker(marker, "ไฟติดAB");
-          document.getElementById("offA").onclick = () => updateMarker(marker, "ไฟดับA");
-          document.getElementById("offB").onclick = () => updateMarker(marker, "ไฟดับB");
-          document.getElementById("offAB").onclick = () => updateMarker(marker, "ไฟดับAB");
-        });
-      }
-
-      function loadSheetData() {
-        fetch(sheetURL)
-          .then(res => res.text())
-          .then(text => {
-            sheetMarkers.forEach(m => map.removeLayer(m)); sheetMarkers = [];
-            const json = JSON.parse(text.substring(47).slice(0, -2));
-            const rows = json.table.rows;
-            rows.forEach(r => {
-              const name = r.c[0]?.v, lat = r.c[1]?.v, lng = r.c[2]?.v, status = r.c[8]?.v || "";
-              if (lat && lng) {
-                const color = colorForStatus(status);
-                const marker = L.marker([lat, lng], {
-                  icon: L.divIcon({ html: `<div style="background:${color};width:18px;height:18px;border-radius:50%;border:2px solid white;box-shadow:0 0 4px rgba(0,0,0,0.3);"></div>` }),
-                  name
-                }).addTo(map);
-                createPopup(marker, name, status, color);
-                sheetMarkers.push(marker);
-              }
-            });
-            if (sheetMarkers.length) map.fitBounds(L.featureGroup(sheetMarkers).getBounds());
-            statusEl.innerHTML = "✅ อัปเดตล่าสุด: " + new Date().toLocaleTimeString();
-          })
-          .catch(e => { console.error(e); statusEl.textContent = "❌ โหลดข้อมูลไม่สำเร็จ"; });
-      }
-
-      loadSheetData();
-      setInterval(loadSheetData, 300000);
-      document.getElementById("refreshBtn").onclick = loadSheetData;
-    };
-  </script>
-</body>
-</html>
