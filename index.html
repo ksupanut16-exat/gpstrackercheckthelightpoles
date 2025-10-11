@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>GPS Tracker + เสาไฟ (อัปเดตสถานะทันที)</title>
+  <title>GPS Tracker + เสาไฟ (อัปเดตสถานะทันที + เสียงติ๊ง)</title>
 
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <style>
@@ -96,6 +96,10 @@
   </div>
 
   <div id="toast" class="toast"></div>
+
+  <!-- ✅ เสียงติ๊ง -->
+  <audio id="ding" src="https://actions.google.com/sounds/v1/cartoon/wood_plank_flicks.ogg" preload="auto"></audio>
+
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
   <script>
@@ -112,12 +116,10 @@
       const toast = document.getElementById("toast");
       const usernameInput = document.getElementById("username");
       const statusEl = document.getElementById("status");
-      const trackBtn = document.getElementById("trackBtn");
       const refreshBtn = document.getElementById("refreshBtn");
+      const ding = document.getElementById("ding");
 
       let sheetMarkers = [];
-      let userMarker = null, userCircle = null, userPath = [], userPolyline = null, watchID = null;
-      let isZoomedIn = false;
 
       function showToast(msg, type="info") {
         toast.textContent = msg;
@@ -172,9 +174,19 @@
             const newColor = colorForStatus(newStatus);
             statusEl.style.color = newColor;
             statusEl.textContent = newStatus;
+
+            // ✅ เปลี่ยนสี marker
             marker.setIcon(L.divIcon({
               html: `<div style='background:${newColor};width:18px;height:18px;border-radius:50%;border:2px solid white;'></div>`
             }));
+
+            // ✅ เล่นเสียงติ๊ง
+            ding.currentTime = 0;
+            ding.play();
+
+            // ✅ ปิด popup อัตโนมัติ
+            marker.closePopup();
+
             sendStatusToSheet(name, newStatus);
           }
 
