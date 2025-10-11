@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>GPS Tracker + เสาไฟ (อัปเดตสถานะทันที + เสียงติ๊ง)</title>
+  <title>GPS Tracker + เสาไฟ (SP/HM + ไฟติด/ไฟดับ + เต็มจอ + ฟีเจอร์อัปเดตสถานะ)</title>
 
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <style>
@@ -17,7 +17,7 @@
       background: rgba(255,255,255,0.95);
       padding: 10px 14px; border-radius: 10px;
       font-size: 14px; box-shadow: 0 2px 6px rgba(0,0,0,0.25);
-      z-index: 1000;
+      z-index: 1000; line-height: 1.4; max-width: 90%;
     }
 
     .user-input {
@@ -28,11 +28,8 @@
       z-index: 2000; display: flex; align-items: center; gap: 8px;
     }
     .user-input input {
-      border: 1px solid #ccc;
-      border-radius: 6px;
-      padding: 5px 8px;
-      font-size: 14px;
-      width: 150px;
+      border: 1px solid #ccc; border-radius: 6px;
+      padding: 5px 8px; font-size: 14px; width: 150px;
     }
 
     .refresh-btn, .track-btn {
@@ -41,8 +38,7 @@
       padding: 10px 14px; border-radius: 8px;
       font-size: 14px; font-weight: bold; cursor: pointer;
       box-shadow: 0 2px 5px rgba(0,0,0,0.3);
-      transition: background 0.2s ease;
-      z-index: 2000;
+      transition: background 0.2s ease; z-index: 2000;
     }
     .refresh-btn { right: 15px; }
     .track-btn { left: 15px; background: #28a745; }
@@ -96,8 +92,6 @@
   </div>
 
   <div id="toast" class="toast"></div>
-
-  <!-- ✅ เสียงติ๊ง -->
   <audio id="ding" src="https://actions.google.com/sounds/v1/cartoon/wood_plank_flicks.ogg" preload="auto"></audio>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -114,12 +108,15 @@
       const sheetURL = `https://docs.google.com/spreadsheets/d/${sheetID}/gviz/tq?tqx=out:json`;
 
       const toast = document.getElementById("toast");
+      const ding = document.getElementById("ding");
       const usernameInput = document.getElementById("username");
       const statusEl = document.getElementById("status");
+      const trackBtn = document.getElementById("trackBtn");
       const refreshBtn = document.getElementById("refreshBtn");
-      const ding = document.getElementById("ding");
 
       let sheetMarkers = [];
+      let userMarker = null, userCircle = null, userPath = [], userPolyline = null, watchID = null;
+      let isZoomedIn = false;
 
       function showToast(msg, type="info") {
         toast.textContent = msg;
@@ -130,10 +127,10 @@
 
       function colorForStatus(status) {
         if (!status) return "blue";
-        if (/ไฟดับ/i.test(status)) return "red";
-        if (/ไฟติด/i.test(status)) return "green";
         if (/^SP/i.test(status)) return "#ff66b2";
         if (/^HM/i.test(status)) return "#ffd54f";
+        if (/ไฟดับ/i.test(status)) return "red";
+        if (/ไฟติด/i.test(status)) return "green";
         return "blue";
       }
 
@@ -175,18 +172,13 @@
             statusEl.style.color = newColor;
             statusEl.textContent = newStatus;
 
-            // ✅ เปลี่ยนสี marker
             marker.setIcon(L.divIcon({
               html: `<div style='background:${newColor};width:18px;height:18px;border-radius:50%;border:2px solid white;'></div>`
             }));
 
-            // ✅ เล่นเสียงติ๊ง
             ding.currentTime = 0;
             ding.play();
-
-            // ✅ ปิด popup อัตโนมัติ
             marker.closePopup();
-
             sendStatusToSheet(name, newStatus);
           }
 
@@ -222,8 +214,64 @@
           .catch(e => { console.error(e); statusEl.textContent = "❌ โหลดข้อมูลไม่สำเร็จ"; });
       }
 
-      refreshBtn.onclick = loadSheetData;
+      function startTracking() {
+        if (watchID) return;
+        showToast("🚀 เริ่มติดตามตำแหน่ง...", "success");
+        trackBtn.textContent = "⏸️ หยุดติดตาม";
+        trackBtn.classList.add("stop");
+
+        if (document.documentElement.requestFullscreen)
+          document.documentElement.requestFullscreen().catch(() => {});
+
+        watchID = navigator.geolocation.watchPosition(pos => {
+          const { latitude, longitude, accuracy } = pos.coords;
+          if (userMarker) map.removeLayer(userMarker);
+          if (userCircle) map.removeLayer(userCircle);
+
+          userMarker = L.marker([latitude, longitude], { icon: L.divIcon({ html: "📍" }) }).addTo(map);
+          userCircle = L.circle([latitude, longitude], { radius: accuracy }).addTo(map);
+
+          userPath.push([latitude, longitude]);
+          if (userPolyline) map.removeLayer(userPolyline);
+          userPolyline = L.polyline(userPath, { color: "#007bff", weight: 4 }).addTo(map);
+
+          map.setView([latitude, longitude], 17);
+          checkNearbyMarkers(latitude, longitude);
+          statusEl.innerHTML = `📍 ${latitude.toFixed(5)}, ${longitude.toFixed(5)} (±${accuracy.toFixed(1)} m)`;
+        }, () => showToast("⚠️ ไม่สามารถระบุตำแหน่งได้!", "error"), { enableHighAccuracy: true });
+      }
+
+      function stopTracking() {
+        if (!watchID) return;
+        navigator.geolocation.clearWatch(watchID);
+        watchID = null;
+        trackBtn.textContent = "▶️ เริ่มติดตาม";
+        trackBtn.classList.remove("stop");
+        showToast("🛑 หยุดติดตามแล้ว", "info");
+
+        if (document.fullscreenElement)
+          document.exitFullscreen().catch(() => {});
+      }
+
+      trackBtn.onclick = () => { if (watchID) stopTracking(); else startTracking(); };
+
+      function checkNearbyMarkers(lat, lng) {
+        sheetMarkers.forEach(marker => {
+          const dist = map.distance([lat, lng], marker.getLatLng());
+          if (dist < 5 && !isZoomedIn) {
+            isZoomedIn = true;
+            map.setView(marker.getLatLng(), 19, { animate: true });
+            marker.openPopup();
+            showToast(`📡 ใกล้จุด ${marker.options.name} ระยะ ${dist.toFixed(1)} ม.`, "info");
+          } else if (dist >= 10 && isZoomedIn) {
+            isZoomedIn = false;
+          }
+        });
+      }
+
       loadSheetData();
+      setInterval(loadSheetData, 300000);
+      refreshBtn.onclick = loadSheetData;
     };
   </script>
 </body>
