@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>GPS Tracker + เสาไฟ (SP/HM + ไฟติด/ไฟดับ + เต็มจอ + ฟีเจอร์อัปเดตสถานะ)</title>
+  <title>GPS Tracker + เสาไฟ (SP/HM + ไฟติด/ไฟดับ + เต็มจอ + ฟีเจอร์อัปเดตสถานะ + เสียงเตือนใกล้จุด)</title>
 
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <style>
@@ -92,6 +92,8 @@
   </div>
 
   <div id="toast" class="toast"></div>
+
+  <!-- ✅ เพิ่มเสียงติ๊ง -->
   <audio id="ding" src="https://actions.google.com/sounds/v1/cartoon/wood_plank_flicks.ogg" preload="auto"></audio>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -171,13 +173,10 @@
             const newColor = colorForStatus(newStatus);
             statusEl.style.color = newColor;
             statusEl.textContent = newStatus;
-
             marker.setIcon(L.divIcon({
               html: `<div style='background:${newColor};width:18px;height:18px;border-radius:50%;border:2px solid white;'></div>`
             }));
-
-            ding.currentTime = 0;
-            ding.play();
+            ding.currentTime = 0; ding.play();
             marker.closePopup();
             sendStatusToSheet(name, newStatus);
           }
@@ -220,8 +219,7 @@
         trackBtn.textContent = "⏸️ หยุดติดตาม";
         trackBtn.classList.add("stop");
 
-        if (document.documentElement.requestFullscreen)
-          document.documentElement.requestFullscreen().catch(() => {});
+        if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(() => {});
 
         watchID = navigator.geolocation.watchPosition(pos => {
           const { latitude, longitude, accuracy } = pos.coords;
@@ -249,8 +247,7 @@
         trackBtn.classList.remove("stop");
         showToast("🛑 หยุดติดตามแล้ว", "info");
 
-        if (document.fullscreenElement)
-          document.exitFullscreen().catch(() => {});
+        if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
       }
 
       trackBtn.onclick = () => { if (watchID) stopTracking(); else startTracking(); };
@@ -262,6 +259,7 @@
             isZoomedIn = true;
             map.setView(marker.getLatLng(), 19, { animate: true });
             marker.openPopup();
+            ding.currentTime = 0; ding.play(); // ✅ เพิ่มเสียงติ๊งเมื่อเข้าใกล้ marker
             showToast(`📡 ใกล้จุด ${marker.options.name} ระยะ ${dist.toFixed(1)} ม.`, "info");
           } else if (dist >= 10 && isZoomedIn) {
             isZoomedIn = false;
